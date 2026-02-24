@@ -1,0 +1,9 @@
+version: 2
+
+models:
+  - name: mart_netflix_country_year_stats
+    columns:
+      - name: country
+        tests: [not_null]
+      - name: release_year
+        tests: [not_null]
