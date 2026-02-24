@@ -1,0 +1,4 @@
+locations:
+- code_source:
+    module_name: project.defs
+  location_name: poc_kaggle
