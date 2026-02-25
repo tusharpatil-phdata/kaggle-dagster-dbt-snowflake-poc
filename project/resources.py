@@ -15,6 +15,6 @@ def snowflake_conn(_):
     )
 
 dbt_cloud = DbtCloudResource(
-    api_token=os.environ["DBT_CLOUD_API_TOKEN"],
+    token=os.environ["DBT_CLOUD_API_TOKEN"],
     account_id=int(os.environ["DBT_CLOUD_ACCOUNT_ID"]),
 )
