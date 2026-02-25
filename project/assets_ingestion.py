@@ -3,7 +3,7 @@ import snowflake.connector
 from dagster import asset, AssetExecutionContext, MetadataValue
 from .resources import snowflake_conn
 
-@asset
+@asset(group_name="ingestion")
 def kaggle_download_netflix(context: AssetExecutionContext) -> str:
     """
     Downloads netflix_titles.csv from Kaggle into /tmp/kaggle/ in Dagster Cloud.
@@ -37,7 +37,11 @@ def kaggle_download_netflix(context: AssetExecutionContext) -> str:
 
     return str(local_path)
 
-@asset(required_resource_keys={"snowflake_conn"}, deps=["kaggle_download_netflix"])
+@asset(
+    group_name="ingestion",
+    required_resource_keys={"snowflake_conn"},
+    deps=["kaggle_download_netflix"],
+)
 def snowflake_stage_netflix(context: AssetExecutionContext):
     """
     Downloads the Netflix CSV again in this process and PUTs it into Snowflake stage POC_DB.RAW.KAGGLE_STAGE.
@@ -80,7 +84,11 @@ def snowflake_stage_netflix(context: AssetExecutionContext):
 
     context.add_output_metadata({"put_result": MetadataValue.json([list(r) for r in res])})
 
-@asset(required_resource_keys={"snowflake_conn"}, deps=["snowflake_stage_netflix"])
+@asset(
+    group_name="ingestion",
+    required_resource_keys={"snowflake_conn"},
+    deps=["snowflake_stage_netflix"],
+)
 def raw_netflix_titles(context: AssetExecutionContext):
     """
     Creates RAW.NETFLIX_TITLES and loads data from @KAGGLE_STAGE via COPY INTO.
