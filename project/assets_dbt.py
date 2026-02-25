@@ -3,7 +3,10 @@ import time
 import requests
 from dagster import asset, AssetExecutionContext
 
-@asset(deps=["raw_netflix_titles"])
+@asset(
+    group_name="dbt",
+    deps=["raw_netflix_titles"],
+)
 def dbt_poc_run(context: AssetExecutionContext):
     """
     Triggers the dbt Cloud job and waits for it to complete using the dbt Cloud REST API.
