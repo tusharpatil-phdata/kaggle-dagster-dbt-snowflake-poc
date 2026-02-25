@@ -13,7 +13,6 @@ def dbt_poc_run(context: AssetExecutionContext):
     account_id = os.environ["DBT_CLOUD_ACCOUNT_ID"]
     job_id = os.environ["DBT_CLOUD_JOB_ID"]
 
-    # Your dbt Cloud region is us1 (from your URL: ih492.us1.dbt.com)
     base_url = "https://ih492.us1.dbt.com/api/v2"
 
     headers = {
@@ -25,9 +24,12 @@ def dbt_poc_run(context: AssetExecutionContext):
     trigger_url = f"{base_url}/accounts/{account_id}/jobs/{job_id}/run/"
     context.log.info(f"Triggering dbt Cloud job {job_id} at {trigger_url}")
 
-    resp = requests.post(trigger_url, headers=headers, json={})
+    payload = {
+        "cause": "Triggered from Dagster Cloud POC"
+    }
 
-    # Log error body if dbt Cloud responds with 4xx/5xx
+    resp = requests.post(trigger_url, headers=headers, json=payload)
+
     if resp.status_code >= 400:
         context.log.error(
             f"dbt Cloud job trigger failed: status={resp.status_code}, body={resp.text}"
@@ -35,8 +37,6 @@ def dbt_poc_run(context: AssetExecutionContext):
         resp.raise_for_status()
 
     data = resp.json()
-
-    # dbt Cloud API v2 wraps data under "data"
     run_id = data["data"]["id"]
     context.log.info(f"Triggered dbt Cloud run_id={run_id}")
 
@@ -66,8 +66,8 @@ def dbt_poc_run(context: AssetExecutionContext):
             f"elapsed={elapsed}s"
         )
 
-        # According to dbt Cloud docs: 10 = Success, 20 = Error, etc.
-        if status in (10, 20, 30):  # terminal states
+        # 10 = Success, 20 = Error, 30 = Cancelled (terminal states)
+        if status in (10, 20, 30):
             final_status = status
             break
 
@@ -81,5 +81,4 @@ def dbt_poc_run(context: AssetExecutionContext):
         f"dbt Cloud run_id={run_id} completed successfully with status={final_status}"
     )
 
-    # Optional: store run_id in metadata
     context.add_output_metadata({"dbt_run_id": run_id})
