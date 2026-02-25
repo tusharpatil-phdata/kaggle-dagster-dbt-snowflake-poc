@@ -18,17 +18,26 @@ def kaggle_download_netflix(context: AssetExecutionContext) -> str:
     local_path = download_dir / file_name
 
     kaggle.api.authenticate()  # uses KAGGLE_USERNAME/KAGGLE_KEY env vars
-    kaggle.api.dataset_download_file(
+
+    # Older Kaggle client: use dataset_download_files with unzip=True
+    # This will download the dataset archive and extract all files into download_dir.
+    context.log.info(f"Downloading full dataset {dataset} into {download_dir} with unzip=True")
+    kaggle.api.dataset_download_files(
         dataset,
-        file_name,
         path=str(download_dir),
+        force=True,
+        quiet=False,
         unzip=True,
     )
+
+    if not local_path.exists():
+        raise FileNotFoundError(f"Expected file {local_path} not found after Kaggle download")
 
     context.log.info(f"Downloaded {file_name} to {local_path}")
     context.add_output_metadata({"local_path": MetadataValue.path(str(local_path))})
 
     return str(local_path)
+
 
 @asset(required_resource_keys={"snowflake_conn"}, deps=["kaggle_download_netflix"])
 def snowflake_stage_netflix(
