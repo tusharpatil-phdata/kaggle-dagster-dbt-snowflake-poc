@@ -26,7 +26,14 @@ def dbt_poc_run(context: AssetExecutionContext):
     context.log.info(f"Triggering dbt Cloud job {job_id} at {trigger_url}")
 
     resp = requests.post(trigger_url, headers=headers, json={})
-    resp.raise_for_status()
+
+    # Log error body if dbt Cloud responds with 4xx/5xx
+    if resp.status_code >= 400:
+        context.log.error(
+            f"dbt Cloud job trigger failed: status={resp.status_code}, body={resp.text}"
+        )
+        resp.raise_for_status()
+
     data = resp.json()
 
     # dbt Cloud API v2 wraps data under "data"
@@ -50,7 +57,7 @@ def dbt_poc_run(context: AssetExecutionContext):
         status_resp.raise_for_status()
         status_data = status_resp.json()["data"]
 
-        status = status_data["status"]         # numeric
+        status = status_data["status"]  # numeric
         status_humanized = status_data.get("status_humanized")
         final_message = status_data.get("status_message")
 
