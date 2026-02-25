@@ -14,7 +14,5 @@ def snowflake_conn(_):
         database=os.environ["SNOWFLAKE_DATABASE"],
     )
 
-dbt_cloud = DbtCloudResource(
-    token=os.environ["DBT_CLOUD_API_TOKEN"],
-    account_id=int(os.environ["DBT_CLOUD_ACCOUNT_ID"]),
-)
+# Let DbtCloudResource read its config (token, account_id, etc.) from env/config
+dbt_cloud = DbtCloudResource()
