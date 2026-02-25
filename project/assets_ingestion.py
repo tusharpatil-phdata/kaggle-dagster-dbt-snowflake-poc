@@ -79,3 +79,45 @@ def snowflake_stage_netflix(context: AssetExecutionContext):
     res = cur.execute(put_sql).fetchall()
 
     context.add_output_metadata({"put_result": MetadataValue.json([list(r) for r in res])})
+
+@asset(required_resource_keys={"snowflake_conn"}, deps=["snowflake_stage_netflix"])
+def raw_netflix_titles(context: AssetExecutionContext):
+    """
+    Creates RAW.NETFLIX_TITLES and loads data from @KAGGLE_STAGE via COPY INTO.
+    """
+    conn = context.resources.snowflake_conn
+    cur = conn.cursor()
+
+    cur.execute("USE DATABASE POC_DB")
+    cur.execute("USE SCHEMA RAW")
+
+    cur.execute(
+        """
+        CREATE OR REPLACE TABLE NETFLIX_TITLES (
+          show_id STRING,
+          type STRING,
+          title STRING,
+          director STRING,
+          cast STRING,
+          country STRING,
+          date_added STRING,
+          release_year INT,
+          rating STRING,
+          duration STRING,
+          listed_in STRING,
+          description STRING
+        )
+        """
+    )
+
+    copy_sql = """
+        COPY INTO NETFLIX_TITLES
+        FROM @KAGGLE_STAGE
+        FILE_FORMAT = (TYPE=CSV FIELD_OPTIONALLY_ENCLOSED_BY='"' SKIP_HEADER=1)
+        ON_ERROR = 'CONTINUE'
+        FORCE = TRUE;
+    """
+    context.log.info("Running COPY INTO NETFLIX_TITLES")
+    res = cur.execute(copy_sql).fetchall()
+
+    context.add_output_metadata({"copy_result": MetadataValue.json([list(r) for r in res])})
