@@ -1,6 +1,5 @@
-
 from dagster import Definitions
-from .resources import snowflake_conn, dbt_cloud
+from .resources import snowflake_conn
 from .assets_ingestion import (
     kaggle_download_netflix,
     snowflake_stage_netflix,
@@ -19,6 +18,5 @@ defs = Definitions(
     ],
     resources={
         "snowflake_conn": snowflake_conn,
-        "dbt_cloud": dbt_cloud,
     },
 )
