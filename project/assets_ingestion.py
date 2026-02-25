@@ -7,6 +7,7 @@ from .resources import snowflake_conn
 def kaggle_download_netflix(context: AssetExecutionContext) -> str:
     """
     Downloads netflix_titles.csv from Kaggle into /tmp/kaggle/ in Dagster Cloud.
+    Uses dataset_download_files(..., unzip=True) to support the older Kaggle client.
     """
     import kaggle
 
@@ -19,8 +20,6 @@ def kaggle_download_netflix(context: AssetExecutionContext) -> str:
 
     kaggle.api.authenticate()  # uses KAGGLE_USERNAME/KAGGLE_KEY env vars
 
-    # Older Kaggle client: use dataset_download_files with unzip=True
-    # This will download the dataset archive and extract all files into download_dir.
     context.log.info(f"Downloading full dataset {dataset} into {download_dir} with unzip=True")
     kaggle.api.dataset_download_files(
         dataset,
@@ -38,64 +37,45 @@ def kaggle_download_netflix(context: AssetExecutionContext) -> str:
 
     return str(local_path)
 
-
 @asset(required_resource_keys={"snowflake_conn"}, deps=["kaggle_download_netflix"])
-def snowflake_stage_netflix(
-    context: AssetExecutionContext,
-    kaggle_download_netflix: str,
-):
+def snowflake_stage_netflix(context: AssetExecutionContext):
     """
-    PUT the CSV from Dagster container to Snowflake stage POC_DB.RAW.KAGGLE_STAGE.
+    Downloads the Netflix CSV again in this process and PUTs it into Snowflake stage POC_DB.RAW.KAGGLE_STAGE.
+    (We re-download here because Dagster Cloud serverless does not share /tmp between asset steps.)
     """
+    import kaggle
+
+    dataset = "shivamb/netflix-shows"
+    file_name = "netflix_titles.csv"
+
+    # Download in this process
+    download_dir = pathlib.Path("/tmp/kaggle_stage")
+    download_dir.mkdir(parents=True, exist_ok=True)
+    local_path = download_dir / file_name
+
+    kaggle.api.authenticate()
+    context.log.info(f"[stage] Downloading dataset {dataset} into {download_dir} with unzip=True")
+    kaggle.api.dataset_download_files(
+        dataset,
+        path=str(download_dir),
+        force=True,
+        quiet=False,
+        unzip=True,
+    )
+
+    if not local_path.exists():
+        raise FileNotFoundError(f"[stage] Expected file {local_path} not found after Kaggle download")
+
+    # Now PUT into Snowflake
     conn: snowflake.connector.SnowflakeConnection = context.resources.snowflake_conn
     cur = conn.cursor()
 
     cur.execute("USE DATABASE POC_DB")
     cur.execute("USE SCHEMA RAW")
 
-    file_path = kaggle_download_netflix.replace("\\", "/")
+    file_path = str(local_path).replace("\\", "/")
     put_sql = f"PUT file://{file_path} @KAGGLE_STAGE AUTO_COMPRESS=TRUE OVERWRITE=TRUE"
     context.log.info(f"Running Snowflake PUT: {put_sql}")
     res = cur.execute(put_sql).fetchall()
 
     context.add_output_metadata({"put_result": MetadataValue.json([list(r) for r in res])})
-
-@asset(required_resource_keys={"snowflake_conn"}, deps=["snowflake_stage_netflix"])
-def raw_netflix_titles(context: AssetExecutionContext):
-    """
-    Creates RAW.NETFLIX_TITLES and loads data from @KAGGLE_STAGE via COPY INTO.
-    """
-    conn = context.resources.snowflake_conn
-    cur = conn.cursor()
-
-    cur.execute("USE DATABASE POC_DB")
-    cur.execute("USE SCHEMA RAW")
-
-    cur.execute("""
-        CREATE OR REPLACE TABLE NETFLIX_TITLES (
-          show_id STRING,
-          type STRING,
-          title STRING,
-          director STRING,
-          cast STRING,
-          country STRING,
-          date_added STRING,
-          release_year INT,
-          rating STRING,
-          duration STRING,
-          listed_in STRING,
-          description STRING
-        )
-    """)
-
-    copy_sql = """
-        COPY INTO NETFLIX_TITLES
-        FROM @KAGGLE_STAGE
-        FILE_FORMAT = (TYPE=CSV FIELD_OPTIONALLY_ENCLOSED_BY='"' SKIP_HEADER=1)
-        ON_ERROR = 'CONTINUE'
-        FORCE = TRUE;
-    """
-    context.log.info("Running COPY INTO NETFLIX_TITLES")
-    res = cur.execute(copy_sql).fetchall()
-
-    context.add_output_metadata({"copy_result": MetadataValue.json([list(r) for r in res])})
